@@ -2,9 +2,6 @@ import asyncio
 import os
 import sqlite3
 import textwrap
-import uuid
-import base64
-import io
 from dataclasses import dataclass
 from typing import Annotated, Optional, List, Dict
 
@@ -15,16 +12,6 @@ from mcp.server.auth.provider import AccessToken
 from mcp.types import INVALID_PARAMS
 from mcp import ErrorData, McpError
 from pydantic import BaseModel, Field
-try:
-    # Optional content classes for structured image responses
-    from mcp.types import ImageContent, TextContent  # type: ignore
-except Exception:  # pragma: no cover
-    ImageContent = None  # type: ignore
-    TextContent = None  # type: ignore
-try:
-    from PIL import Image  # type: ignore
-except Exception:
-    Image = None  # type: ignore
 
 # Load env
 load_dotenv()
@@ -264,8 +251,8 @@ class SessionState:
 
 QUIZ_SESSIONS: Dict[str, SessionState] = {}
 
-@mcp.tool(description="WhatsApp-friendly formatted question. Use when messaging users.")
-async def play_exam_wa(
+@mcp.tool(description="Welcome to Humanity's Final Exam. A battle between Human And AI")
+async def Start_Final_Exam(
     subject: Annotated[Optional[str], Field(description="Optional subject filter (e.g., Physics)")] = None,
     question_type: Annotated[Optional[str], Field(description="Optional question type filter")] = None,
 ) -> str:
@@ -440,35 +427,6 @@ async def db_summary_wa() -> str:
     return "\n".join(lines)
 
 
-# ============ Media tools ============
-
-@mcp.tool(description="Convert a base64 image to black-and-white and return as image content.")
-async def make_img_black_and_white(
-    puch_image_data: Annotated[str, Field(description="Base64-encoded image data to convert to black and white")],
-) -> list:
-    if not puch_image_data:
-        raise McpError(ErrorData(code=INVALID_PARAMS, message="puch_image_data is required"))
-    if Image is None:
-        raise McpError(ErrorData(code=INVALID_PARAMS, message="Pillow is not installed on the server"))
-
-    try:
-        raw = base64.b64decode(puch_image_data, validate=True)
-    except Exception:
-        raise McpError(ErrorData(code=INVALID_PARAMS, message="Invalid base64 image data"))
-
-    try:
-        with Image.open(io.BytesIO(raw)) as img:
-            bw = img.convert("L")
-            buf = io.BytesIO()
-            bw.save(buf, format="PNG")
-            bw_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-    except Exception:
-        raise McpError(ErrorData(code=INVALID_PARAMS, message="Unable to process image"))
-
-    if ImageContent is not None:
-        return [ImageContent(type="image", mimeType="image/png", data=bw_base64)]  # type: ignore
-    # Fallback to dict format if ImageContent class is unavailable
-    return [{"type": "image", "mimeType": "image/png", "data": bw_base64}]
 
 async def main():
     print(f"🚀 HLE MCP on http://0.0.0.0:8086  (DB: {DB_PATH})")
