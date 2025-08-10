@@ -203,6 +203,24 @@ def _format_answer_wa(is_correct: bool, ground_truth: str, explanation: str) -> 
     return "\n".join(lines)
 
 
+def _format_quiz_wa(questions: List[Question]) -> str:
+    header = f"*HLE Quiz* — {len(questions)} question{'s' if len(questions) != 1 else ''}"
+    lines: List[str] = [header, ""]
+    for idx, q in enumerate(questions, start=1):
+        lines.append(f"*{idx}.* {_wrap(q.question.strip(), 70)}")
+        if q.subject:
+            lines.append(f"   - 📚 Subject: {q.subject}")
+        if q.difficulty:
+            lines.append(f"   - 🎯 Difficulty: {q.difficulty}")
+        if q.question_type:
+            lines.append(f"   - 🧩 Type: {q.question_type}")
+        lines.append(f"   - 🆔 `{q.id}`")
+        lines.append("")
+    # Remove trailing blank line
+    if lines and lines[-1] == "":
+        lines.pop()
+    return "\n".join(lines)
+
 @mcp.tool(description="WhatsApp-friendly formatted question. Use when messaging users.")
 async def play_exam_wa(
     subject: Annotated[Optional[str], Field(description="Optional subject filter (e.g., Physics)")] = None,
@@ -223,19 +241,19 @@ async def play_exam_wa(
         if qtype_canon:
             sql += " AND question_type = ?"
             params.append(qtype_canon)
-        sql += " ORDER BY RANDOM() LIMIT 1"
+        sql += " ORDER BY RANDOM() LIMIT 10"
 
         cur = conn.execute(sql, params)
-        row = cur.fetchone()
-        if not row:
+        rows = cur.fetchall()
+        if not rows:
             cur = conn.execute(
-                "SELECT id, question, subject, difficulty, question_type FROM questions ORDER BY RANDOM() LIMIT 1"
+                "SELECT id, question, subject, difficulty, question_type FROM questions ORDER BY RANDOM() LIMIT 10"
             )
-            row = cur.fetchone()
-        if not row:
+            rows = cur.fetchall()
+        if not rows:
             raise McpError(ErrorData(code=INVALID_PARAMS, message="No question available (database empty)"))
-        q = Question(**dict(row))
-        return _format_question_wa(q)
+        questions = [Question(**dict(r)) for r in rows]
+        return _format_quiz_wa(questions)
 
 
 @mcp.tool(description="WhatsApp-friendly formatted answer check.")
