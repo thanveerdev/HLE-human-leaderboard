@@ -1,1 +1,54 @@
+#########################
+# General
+#########################
+.DS_Store
+**/.DS_Store
+
+#########################
+# Python
+#########################
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+**/.venv/
+env/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+.hypothesis/
+
+#########################
+# Secrets and local env
+#########################
+.history/
+.env
+.env.*
+**/.env
+**/.env.*
+
+#########################
+# Project artifacts
+#########################
+hle_pipeline/data/*.db
+*.sqlite
+*.sqlite3
+
+#########################
+# Packaging artifacts
+#########################
+*.egg-info/
+
+#########################
+# Project-specific ignores
+#########################
 viral.md
