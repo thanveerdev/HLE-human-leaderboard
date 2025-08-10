@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hle-whatsapp-mcp"
+version = "0.1.0"
+description = "Humanity's Last Exam WhatsApp MCP quiz: SQLite ingest + MCP server"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["MCP", "WhatsApp", "quiz", "HLE"]
+dependencies = []
+
+[project.optional-dependencies]
+server = [
+  "fastmcp>=2.11.2",
+  "python-dotenv>=1.0.1",
+]
+pipeline = [
+  "datasets>=2.14.0",
+  "pandas>=2.0.0",
+  "requests>=2.31.0",
+]
+
+[tool.setuptools]
+packages = []
+
+

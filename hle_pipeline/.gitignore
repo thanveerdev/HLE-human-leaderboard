@@ -1,0 +1,27 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Envs
+.env
+.venv/
+
+# OS files
+.DS_Store
+
+# Local caches
+.hle_cache/
+.history/
+
+# IDEs
+.vscode/
+.idea/
+
+# Data files
+data/
+*.db
+*.sqlite
+
+# Misc
+*.log

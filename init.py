@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import shutil
 import secrets
 import subprocess
 import sys
@@ -43,13 +44,11 @@ def venv_python(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "python"
 
 
-def ensure_venv(venv_dir: Path, base_python: str) -> Path:
-    if not venv_dir.exists():
-        run([base_python, "-m", "venv", str(venv_dir)])
-    py = venv_python(venv_dir)
-    if not py.exists():
-        raise RuntimeError(f"Python not found in venv: {py}")
-    return py
+def ensure_uv_installed() -> None:
+    if shutil.which("uv") is None:
+        raise RuntimeError(
+            "uv is required. Install with: brew install uv  (macOS) or see https://docs.astral.sh/uv/"
+        )
 
 
 def _read_env_file(env_path: Path) -> dict[str, str]:
@@ -117,13 +116,13 @@ def main() -> None:
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent
-    hle_dir = root / "HLE-Streamlit"
+    hle_dir = root / "hle_pipeline"
     hle_scripts = hle_dir / "scripts"
     hle_data = hle_dir / "data"
     hle_venv = hle_dir / ".venv"
     hle_requirements = hle_dir / "quiz_requirements.txt"
 
-    server_dir = root / "prototype1"
+    server_dir = root / "mcp_server"
     server_venv = server_dir / ".venv"
     server_requirements = server_dir / "requirements.txt"
     server_env = server_dir / ".env"
@@ -132,9 +131,16 @@ def main() -> None:
     print(f"Using base python: {base_python}")
 
     # 1) Prepare HLE venv and ingest DB
-    hle_py = ensure_venv(hle_venv, base_python)
-    run([str(hle_py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"]) 
-    run([str(hle_py), "-m", "pip", "install", "-r", str(hle_requirements)], cwd=hle_dir)
+    ensure_uv_installed()
+    # Create venvs with uv (idempotent)
+    if not hle_venv.exists():
+        run(["uv", "venv"], cwd=hle_dir)
+    hle_py = venv_python(hle_venv)
+    # Prefer installing from root via extras to keep dependencies centralized
+    hle_env = os.environ.copy()
+    hle_env["VIRTUAL_ENV"] = str(hle_venv)
+    hle_env["PATH"] = str(hle_venv / "bin") + os.pathsep + hle_env.get("PATH", "")
+    run(["uv", "pip", "install", "-e", ".[pipeline]"], cwd=root, env=hle_env)
 
     ingest_env = os.environ.copy()
     if args.hf_token:
@@ -149,9 +155,13 @@ def main() -> None:
     run(init_db_cmd, cwd=hle_dir, env=ingest_env)
 
     # 2) Prepare MCP server venv and .env
-    server_py = ensure_venv(server_venv, base_python)
-    run([str(server_py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"]) 
-    run([str(server_py), "-m", "pip", "install", "-r", str(server_requirements)], cwd=server_dir)
+    if not server_venv.exists():
+        run(["uv", "venv"], cwd=server_dir)
+    server_py = venv_python(server_venv)
+    server_env = os.environ.copy()
+    server_env["VIRTUAL_ENV"] = str(server_venv)
+    server_env["PATH"] = str(server_venv / "bin") + os.pathsep + server_env.get("PATH", "")
+    run(["uv", "pip", "install", "-e", ".[server]"], cwd=root, env=server_env)
 
     # Preserve existing .env values unless explicitly overridden via flags/env
     existing = _read_env_file(server_env)
@@ -167,7 +177,7 @@ def main() -> None:
 
     print("\nSetup complete.")
     print("\nNext steps:")
-    print(f"1) Start the MCP server:\n   cd {server_dir}\n   {server_py} mcp_hle_server.py")
+    print(f"1) Start the MCP server:\n   cd {server_dir}\n   source .venv/bin/activate\n   python mcp_hle_server.py")
     print("2) Expose publicly (in another terminal):\n   cloudflared tunnel --url http://localhost:8086")
     print("3) Connect from your WhatsApp host using Bearer auth with your AUTH_TOKEN.")
 
