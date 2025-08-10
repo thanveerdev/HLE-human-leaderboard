@@ -287,26 +287,29 @@ async def play_exam_wa(
         return _format_quiz_wa(questions)
 
 
-@mcp.tool(description="Start a 10-question WhatsApp quiz (one-by-one flow). Returns a session id and first question.")
+@mcp.tool(description="Start a 10-question WhatsApp quiz (one-by-one). Random subject/type; optional difficulty_level 1-5 (short→long). Returns a session id and first question.")
 async def start_quiz_wa(
-    subject: Annotated[Optional[str], Field(description="Optional subject filter (e.g., Physics)")] = None,
-    question_type: Annotated[Optional[str], Field(description="Optional question type filter")] = None,
+    difficulty_level: Annotated[Optional[int], Field(description="Optional difficulty 1-5: 1 easiest, 5 hardest (based on question length)")] = None,
 ) -> str:
     with get_conn() as conn:
-        subjects = get_all_subjects(conn)
-        qtypes = get_all_question_types(conn)
-
-        subj_canon = normalize_subject(subject, subjects)
-        qtype_canon = normalize_qtype(question_type, qtypes)
-
         sql = "SELECT id, question, subject, difficulty, question_type FROM questions WHERE 1=1"
         params: list = []
-        if subj_canon:
-            sql += " AND subject = ?"
-            params.append(subj_canon)
-        if qtype_canon:
-            sql += " AND question_type = ?"
-            params.append(qtype_canon)
+        # Map difficulty_level (1..5) to length-based bins
+        try:
+            lvl = int(difficulty_level) if difficulty_level is not None else None
+        except Exception:
+            lvl = None
+        if lvl is not None and 1 <= lvl <= 5:
+            if lvl == 1:
+                sql += " AND LENGTH(question) < 80"
+            elif lvl == 2:
+                sql += " AND LENGTH(question) BETWEEN 80 AND 140"
+            elif lvl == 3:
+                sql += " AND LENGTH(question) BETWEEN 140 AND 220"
+            elif lvl == 4:
+                sql += " AND LENGTH(question) BETWEEN 220 AND 300"
+            elif lvl == 5:
+                sql += " AND LENGTH(question) > 300"
         sql += " ORDER BY RANDOM() LIMIT 10"
 
         cur = conn.execute(sql, params)
