@@ -19,7 +19,7 @@ Use your WhatsApp host that supports MCP (Model Context Protocol) to call the MC
 │  ├─ scripts/                # init_db.py (creates and populates SQLite DB)
 │  └─ data/hle_quiz.db        # SQLite DB (created on first ingest)
 ├─ mcp_server/                # Minimal MCP server (Bearer auth)
-│  ├─ mcp_hle_server.py       # MCP tools: validate, play_exam, check_answer
+│  ├─ mcp_hle_server.py       # MCP tools: validate + WhatsApp-friendly variants
 │  ├─ requirements.txt        # Minimal deps
 │  └─ .env.example            # Copy to .env and fill AUTH_TOKEN, MY_NUMBER
 └─ docs/                      # Guides and planning docs
@@ -75,8 +75,10 @@ Copy the printed `https://<random>.trycloudflare.com` URL.
 ## Available MCP tools
 
 - validate(): returns your `MY_NUMBER` (host uses this to verify ownership)
-- play_exam(subject?, question_type?): returns one random question from the DB
-- check_answer(question_id, answer): returns a simple verdict and ground truth
+- start_quiz_wa(user_id, difficulty_level?): start a 10-question session; random subject/type; optional difficulty 1–5
+- answer_quiz_wa(user_id, answer): submit an answer; replies with verdict and next question; final score at the end
+- play_exam_wa(subject?, question_type?): WhatsApp-friendly bold + emoji bullets (returns 10 questions at once)
+- db_summary_wa(): WhatsApp-friendly database summary
 
 Example JSON response from play_exam:
 ```json
