@@ -29,7 +29,7 @@ Use your WhatsApp host that supports MCP (Model Context Protocol) to call the MC
 
 ### 1) One-command setup
 
-Requirements: Python 3.11+, `uv` installed. If `.env` exists with `HF_TOKEN=...`, setup will auto-load it.
+Requirements: Python 3.11+, `pip` installed. If `.env` exists with `HF_TOKEN=...`, setup will auto-load it.
 
 ```bash
 ## Option A: Use local env file
@@ -40,7 +40,7 @@ bash scripts/setup.sh --force
 HF_TOKEN=hf_xxx bash scripts/setup.sh --force
 ```
 
-This will create venvs, install deps via uv, initialize the DB, and ensure a root `.env` exists.
+This will install dependencies via pip, initialize the DB, and ensure a root `.env` exists.
 
 ### 2) Run the MCP server
 
@@ -50,18 +50,20 @@ bash scripts/run_server.sh
 
 You should see the MCP server listening on http://0.0.0.0:8086.
 
-Note for zsh users: always quote extras, e.g. '.[server]' or escape brackets: .\[server\].
+The server will start on http://0.0.0.0:8086 and display startup information.
 
 ### 3) Expose the MCP server (Cloudflare Tunnel)
 
 ```bash
-# Install once (macOS):
-brew install cloudflare/cloudflare/cloudflared
+# Install cloudflared (macOS):
+brew install cloudflared
+# Or download directly from: https://github.com/cloudflare/cloudflared/releases
 
-# Start a quick tunnel to your local MCP server
+# Start a quick tunnel to your local MCP server (run in separate terminal)
 cloudflared tunnel --url http://localhost:8086
 ```
-#cloudflared tunnel --edge-ip-version 4 --protocol quic --logfile logs/cloudflared.log --loglevel debug --url http://localhost:8086 // for edgecases
+
+**Note**: Keep both the MCP server and cloudflared tunnel running in separate terminal windows.
 
 Copy the printed `https://<random>.trycloudflare.com` URL.
 
@@ -89,27 +91,37 @@ Example JSON response from play_exam:
 
 ## Operational notes
 
-- Secrets
-  - MCP: root `.env` with `AUTH_TOKEN`, `MY_NUMBER` (E.164 format).
-  - HLE ingest: `HF_TOKEN` (either exported in shell or set in root `.env`).
-- Database path
-  - Defaults to `hle_pipeline/data/hle_quiz.db`.
-  - Override by setting `DB_PATH` in root `.env`.
-- Cloud exposure
-  - `cloudflared tunnel --url http://localhost:8086` is the fastest path for demos.
+- **Setup Requirements**
+  - Python 3.11+ with pip installed
+  - Optional: Hugging Face token for real HLE questions (otherwise uses empty database)
+- **Environment Configuration**
+  - MCP server: root `.env` with `AUTH_TOKEN`, `MY_NUMBER` (E.164 format)
+  - HLE dataset: `HF_TOKEN` in root `.env` or `hle_pipeline/.env`
+- **Database path**
+  - Defaults to `hle_pipeline/data/hle_quiz.db`
+  - Override by setting `DB_PATH` in root `.env`
+- **Public Access**
+  - Run MCP server first, then cloudflared tunnel in separate terminal
+  - `cloudflared tunnel --url http://localhost:8086` provides instant public access
 - Licensing
   - HLE code is MIT (repo); dataset terms apply via Hugging Face. Do not train on HLE; respect redistribution limits.
 
 ## Troubleshooting
 
-- MCP server fails with `AUTH_TOKEN is required`:
-  - Create `.env` with `AUTH_TOKEN=...` and `MY_NUMBER=+...` (no quotes or comments).
-- `python-dotenv could not parse statement ...`:
-  - Ensure `.env` contains only `KEY=VALUE` lines; wrap DB paths with spaces in double quotes.
-- `No question available for provided filters`:
-  - Remove filters or verify the DB is populated (re-run `scripts/init_db.py --force`).
-- Cloudflare URL not reachable:
-  - Keep `cloudflared` running; confirm your local firewall allows the port.
+- **MCP server fails with `AUTH_TOKEN is required`**:
+  - Create root `.env` with `AUTH_TOKEN=...` and `MY_NUMBER=+...` (no quotes or comments)
+- **Port 8086 already in use**:
+  - Kill existing process: `lsof -ti :8086 | xargs kill -9`
+  - Or change port in `mcp_hle_server.py`
+- **`python-dotenv could not parse statement`**:
+  - Ensure `.env` contains only `KEY=VALUE` lines; wrap paths with spaces in double quotes
+- **`No question available`**:
+  - Database is empty - set `HF_TOKEN` and re-run `bash scripts/setup.sh --force`
+- **Cloudflare tunnel fails with "context canceled"**:
+  - Ensure MCP server is fully started and listening on port 8086 before running tunnel
+  - Check `curl http://localhost:8086` returns a response
+- **Missing dependencies**:
+  - Run `pip install -e ".[server,pipeline]"` from project root
 
 ## Roadmap (nice-to-haves)
 
