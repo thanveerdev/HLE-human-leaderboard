@@ -277,6 +277,203 @@ async def check_answer_pretty(
         expl = row["explanation"] or ""
         return _format_answer_pretty(is_correct=is_correct, ground_truth=row["answer"], explanation=expl)
 
+
+# ============ Summary tools ============
+
+def _get_db_summary(conn: sqlite3.Connection) -> dict:
+    total_questions = conn.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
+
+    # Subject counts
+    subject_counts_rows = conn.execute(
+        """
+        SELECT subject, COUNT(*) as count
+        FROM questions
+        GROUP BY subject
+        ORDER BY count DESC
+        """
+    ).fetchall()
+    subject_counts = {row[0]: row[1] for row in subject_counts_rows}
+
+    # Difficulty counts
+    difficulty_counts_rows = conn.execute(
+        """
+        SELECT difficulty, COUNT(*) as count
+        FROM questions
+        GROUP BY difficulty
+        ORDER BY count DESC
+        """
+    ).fetchall()
+    difficulty_counts = {row[0]: row[1] for row in difficulty_counts_rows}
+
+    # Question type counts
+    qtype_counts_rows = conn.execute(
+        """
+        SELECT question_type, COUNT(*) as count
+        FROM questions
+        GROUP BY question_type
+        ORDER BY count DESC
+        """
+    ).fetchall()
+    question_type_counts = {row[0]: row[1] for row in qtype_counts_rows}
+
+    return {
+        "total_questions": total_questions,
+        "subjects": list(subject_counts.keys()),
+        "difficulties": list(difficulty_counts.keys()),
+        "question_types": list(question_type_counts.keys()),
+        "subject_counts": subject_counts,
+        "difficulty_counts": difficulty_counts,
+        "question_type_counts": question_type_counts,
+    }
+
+
+@mcp.tool(description="Return a JSON summary of the question database.")
+async def db_summary() -> dict:
+    with get_conn() as conn:
+        return _get_db_summary(conn)
+
+
+@mcp.tool(description="Pretty database summary with counts and categories.")
+async def db_summary_pretty() -> str:
+    with get_conn() as conn:
+        stats = _get_db_summary(conn)
+
+    lines: List[str] = [
+        f"Total questions: {stats['total_questions']}",
+        "",
+        "By subject:",
+    ]
+    for subj, count in stats["subject_counts"].items():
+        lines.append(f" - {subj}: {count}")
+    lines += [
+        "",
+        "By difficulty:",
+    ]
+    for diff, count in stats["difficulty_counts"].items():
+        lines.append(f" - {diff}: {count}")
+    lines += [
+        "",
+        "By question type:",
+    ]
+    for qt, count in stats["question_type_counts"].items():
+        lines.append(f" - {qt}: {count}")
+
+    return _box(" DB Summary ", lines)
+
+
+# ============ WhatsApp-friendly tools ============
+
+def _format_question_wa(q: Question) -> str:
+    parts: List[str] = [
+        "*HLE Question*",
+        _wrap(q.question.strip(), 70),
+        "",
+    ]
+    if q.subject:
+        parts.append(f"- 📚 Subject: {q.subject}")
+    if q.difficulty:
+        parts.append(f"- 🎯 Difficulty: {q.difficulty}")
+    if q.question_type:
+        parts.append(f"- 🧩 Type: {q.question_type}")
+    parts.append(f"- 🆔 `{q.id}`")
+    return "\n".join(parts)
+
+
+def _format_answer_wa(is_correct: bool, ground_truth: str, explanation: str) -> str:
+    header = "*Result*"
+    verdict = "✅ Correct" if is_correct else "❌ Incorrect"
+    lines: List[str] = [
+        header,
+        verdict,
+        f"🔎 Ground truth: {ground_truth}",
+    ]
+    if explanation:
+        lines += ["", "*Explanation*", _wrap(explanation, 70)]
+    return "\n".join(lines)
+
+
+@mcp.tool(description="WhatsApp-friendly formatted question. Use when messaging users.")
+async def play_exam_wa(
+    subject: Annotated[Optional[str], Field(description="Optional subject filter (e.g., Physics)")] = None,
+    question_type: Annotated[Optional[str], Field(description="Optional question type filter")] = None,
+) -> str:
+    with get_conn() as conn:
+        subjects = get_all_subjects(conn)
+        qtypes = get_all_question_types(conn)
+
+        subj_canon = normalize_subject(subject, subjects)
+        qtype_canon = normalize_qtype(question_type, qtypes)
+
+        sql = "SELECT id, question, subject, difficulty, question_type FROM questions WHERE 1=1"
+        params: list = []
+        if subj_canon:
+            sql += " AND subject = ?"
+            params.append(subj_canon)
+        if qtype_canon:
+            sql += " AND question_type = ?"
+            params.append(qtype_canon)
+        sql += " ORDER BY RANDOM() LIMIT 1"
+
+        cur = conn.execute(sql, params)
+        row = cur.fetchone()
+        if not row:
+            cur = conn.execute(
+                "SELECT id, question, subject, difficulty, question_type FROM questions ORDER BY RANDOM() LIMIT 1"
+            )
+            row = cur.fetchone()
+        if not row:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="No question available (database empty)"))
+        q = Question(**dict(row))
+        return _format_question_wa(q)
+
+
+@mcp.tool(description="WhatsApp-friendly formatted answer check.")
+async def check_answer_wa(
+    question_id: Annotated[str, Field(description="The question id returned by play_exam")],
+    answer: Annotated[str, Field(description="User's answer text")],
+) -> str:
+    answer_norm = (answer or "").strip().lower()
+    if not answer_norm:
+        raise McpError(ErrorData(code=INVALID_PARAMS, message="Answer cannot be empty"))
+    with get_conn() as conn:
+        cur = conn.execute("SELECT answer, explanation FROM questions WHERE id = ?", (question_id,))
+        row = cur.fetchone()
+        if not row:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="Unknown question id"))
+        gt = (row["answer"] or "").strip().lower()
+        is_correct = (answer_norm == gt) or (gt in answer_norm) or (answer_norm in gt)
+        expl = row["explanation"] or ""
+        return _format_answer_wa(is_correct=is_correct, ground_truth=row["answer"], explanation=expl)
+
+
+@mcp.tool(description="WhatsApp-friendly formatted database summary.")
+async def db_summary_wa() -> str:
+    with get_conn() as conn:
+        stats = _get_db_summary(conn)
+
+    lines: List[str] = [
+        "*DB Summary*",
+        f"*Total questions*: {stats['total_questions']}",
+        "",
+        "*By subject*",
+    ]
+    for subj, count in stats["subject_counts"].items():
+        lines.append(f"- {subj}: {count}")
+    lines += [
+        "",
+        "*By difficulty*",
+    ]
+    for diff, count in stats["difficulty_counts"].items():
+        lines.append(f"- {diff}: {count}")
+    lines += [
+        "",
+        "*By question type*",
+    ]
+    for qt, count in stats["question_type_counts"].items():
+        lines.append(f"- {qt}: {count}")
+
+    return "\n".join(lines)
+
 async def main():
     print(f"🚀 HLE MCP on http://0.0.0.0:8086  (DB: {DB_PATH})")
     await mcp.run_async("streamable-http", host="0.0.0.0", port=8086)
