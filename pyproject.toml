@@ -16,6 +16,7 @@ dependencies = []
 server = [
   "fastmcp>=2.11.2",
   "python-dotenv>=1.0.1",
+  "Pillow>=10.0.0",
 ]
 pipeline = [
   "datasets>=2.14.0",

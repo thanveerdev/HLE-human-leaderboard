@@ -3,6 +3,8 @@ import os
 import sqlite3
 import textwrap
 import uuid
+import base64
+import io
 from dataclasses import dataclass
 from typing import Annotated, Optional, List, Dict
 
@@ -13,6 +15,16 @@ from mcp.server.auth.provider import AccessToken
 from mcp.types import INVALID_PARAMS
 from mcp import ErrorData, McpError
 from pydantic import BaseModel, Field
+try:
+    # Optional content classes for structured image responses
+    from mcp.types import ImageContent, TextContent  # type: ignore
+except Exception:  # pragma: no cover
+    ImageContent = None  # type: ignore
+    TextContent = None  # type: ignore
+try:
+    from PIL import Image  # type: ignore
+except Exception:
+    Image = None  # type: ignore
 
 # Load env
 load_dotenv()
@@ -287,9 +299,10 @@ async def play_exam_wa(
         return _format_quiz_wa(questions)
 
 
-@mcp.tool(description="Start a 10-question WhatsApp quiz (one-by-one). Random subject/type; optional difficulty_level 1-5 (short→long). Returns a session id and first question.")
+@mcp.tool(description="Start a 10-question WhatsApp quiz (one-by-one). Random subject/type; optional difficulty_level 1-5. Returns the first question. Requires user_id.")
 async def start_quiz_wa(
-    difficulty_level: Annotated[Optional[int], Field(description="Optional difficulty 1-5: 1 easiest, 5 hardest (based on question length)")] = None,
+    user_id: Annotated[str, Field(description="Unique user id (e.g., phone number)")],
+    difficulty_level: Annotated[Optional[int], Field(description="Optional difficulty 1-5: 1 easiest, 5 hardest (based on length)")] = None,
 ) -> str:
     with get_conn() as conn:
         sql = "SELECT id, question, subject, difficulty, question_type FROM questions WHERE 1=1"
@@ -323,15 +336,11 @@ async def start_quiz_wa(
             raise McpError(ErrorData(code=INVALID_PARAMS, message="No question available (database empty)"))
 
     questions = [Question(**dict(r)) for r in rows]
-    session_id = uuid.uuid4().hex
-    QUIZ_SESSIONS[session_id] = SessionState(questions=questions)
+    # Start/overwrite session for this user
+    QUIZ_SESSIONS[user_id] = SessionState(questions=questions)
 
     first = questions[0]
-    msg = [
-        f"SID: {session_id}",
-        _format_single_question_wa(first, idx=1, total=len(questions)),
-    ]
-    return "\n".join(msg)
+    return _format_single_question_wa(first, idx=1, total=len(questions))
 
 
 @mcp.tool(description="WhatsApp-friendly formatted answer check.")
@@ -353,14 +362,14 @@ async def check_answer_wa(
         return _format_answer_wa(is_correct=is_correct, ground_truth=row["answer"], explanation=expl)
 
 
-@mcp.tool(description="Submit an answer for the current question in a running quiz session. Returns verdict and next question or final score.")
+@mcp.tool(description="Submit an answer for the current question. Returns verdict and next question or final score. Requires user_id.")
 async def answer_quiz_wa(
-    session_id: Annotated[str, Field(description="Session id returned by start_quiz_wa")],
+    user_id: Annotated[str, Field(description="Unique user id (e.g., phone number)")],
     answer: Annotated[str, Field(description="User's answer text")],
 ) -> str:
-    state = QUIZ_SESSIONS.get(session_id)
+    state = QUIZ_SESSIONS.get(user_id)
     if state is None:
-        raise McpError(ErrorData(code=INVALID_PARAMS, message="Unknown or expired session_id"))
+        raise McpError(ErrorData(code=INVALID_PARAMS, message="No active quiz for this user. Say 'start quiz' to begin."))
 
     # Identify current question
     if state.current_index >= len(state.questions):
@@ -394,7 +403,7 @@ async def answer_quiz_wa(
         total = len(state.questions)
         score_line = f"🎉 Quiz complete. Score: {state.correct_count}/{total}"
         # Clean up session
-        QUIZ_SESSIONS.pop(session_id, None)
+        QUIZ_SESSIONS.pop(user_id, None)
         return "\n".join([verdict, score_line])
 
     next_q = state.questions[state.current_index]
@@ -429,6 +438,37 @@ async def db_summary_wa() -> str:
         lines.append(f"- {qt}: {count}")
 
     return "\n".join(lines)
+
+
+# ============ Media tools ============
+
+@mcp.tool(description="Convert a base64 image to black-and-white and return as image content.")
+async def make_img_black_and_white(
+    puch_image_data: Annotated[str, Field(description="Base64-encoded image data to convert to black and white")],
+) -> list:
+    if not puch_image_data:
+        raise McpError(ErrorData(code=INVALID_PARAMS, message="puch_image_data is required"))
+    if Image is None:
+        raise McpError(ErrorData(code=INVALID_PARAMS, message="Pillow is not installed on the server"))
+
+    try:
+        raw = base64.b64decode(puch_image_data, validate=True)
+    except Exception:
+        raise McpError(ErrorData(code=INVALID_PARAMS, message="Invalid base64 image data"))
+
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            bw = img.convert("L")
+            buf = io.BytesIO()
+            bw.save(buf, format="PNG")
+            bw_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    except Exception:
+        raise McpError(ErrorData(code=INVALID_PARAMS, message="Unable to process image"))
+
+    if ImageContent is not None:
+        return [ImageContent(type="image", mimeType="image/png", data=bw_base64)]  # type: ignore
+    # Fallback to dict format if ImageContent class is unavailable
+    return [{"type": "image", "mimeType": "image/png", "data": bw_base64}]
 
 async def main():
     print(f"🚀 HLE MCP on http://0.0.0.0:8086  (DB: {DB_PATH})")

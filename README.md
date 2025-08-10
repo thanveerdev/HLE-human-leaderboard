@@ -75,8 +75,9 @@ Copy the printed `https://<random>.trycloudflare.com` URL.
 ## Available MCP tools
 
 - validate(): returns your `MY_NUMBER` (host uses this to verify ownership)
-- play_exam_wa(subject?, question_type?): WhatsApp-friendly bold + emoji bullets (returns 10 questions)
-- check_answer_wa(question_id, answer): WhatsApp-friendly verdict + explanation
+- start_quiz_wa(user_id, difficulty_level?): start a 10-question session; random subject/type; optional difficulty 1–5
+- answer_quiz_wa(user_id, answer): submit an answer; replies with verdict and next question; final score at the end
+- play_exam_wa(subject?, question_type?): WhatsApp-friendly bold + emoji bullets (returns 10 questions at once)
 - db_summary_wa(): WhatsApp-friendly database summary
 
 Example JSON response from play_exam:
