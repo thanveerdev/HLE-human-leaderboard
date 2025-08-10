@@ -25,7 +25,9 @@ DEFAULT_DB_PATH = os.path.abspath(
 DB_PATH = os.environ.get("DB_PATH", DEFAULT_DB_PATH)
 
 if not AUTH_TOKEN:
-    raise RuntimeError("AUTH_TOKEN is required in environment (.env)")
+    # NOTE: For testing only. In production, set AUTH_TOKEN via .env and remove this fallback.
+    print("[WARN] AUTH_TOKEN not set; using insecure test token 'dev'.")
+    AUTH_TOKEN = "dev"
 
 class SimpleBearerAuthProvider(BearerAuthProvider):
     def __init__(self, token: str):
