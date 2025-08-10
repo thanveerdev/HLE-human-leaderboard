@@ -5,11 +5,12 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$ROOT_DIR"
 
-# Load environment variables from mcp_server/.env if it exists
-if [ -f "mcp_server/.env" ]; then
-  echo "==> Loading environment from mcp_server/.env"
+# Load environment variables from root .env if it exists
+if [ -f ".env" ]; then
+  echo "==> Loading environment from .env"
   set -a
-  source mcp_server/.env
+  # shellcheck disable=SC1091
+  source .env
   set +a
 fi
 

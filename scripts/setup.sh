@@ -18,13 +18,13 @@ cd "$ROOT_DIR"
 echo "==> Installing package dependencies"
 pip install -e ".[server,pipeline]"
 
-echo "==> Loading HF_TOKEN from hle_pipeline/.env if present"
-# Load HF_TOKEN from local .env if present
-if [ -f "hle_pipeline/.env" ]; then
-  echo "==> Found HF_TOKEN in hle_pipeline/.env"
+echo "==> Loading env from root .env if present"
+# Load variables from root .env if present
+if [ -f ".env" ]; then
+  echo "==> Found .env"
   set -a
   # shellcheck disable=SC1091
-  . ./hle_pipeline/.env
+  . ./.env
   set +a
 fi
 
@@ -35,19 +35,19 @@ else
   python -m hle_pipeline.scripts.init_db
 fi
 
-echo "==> Checking mcp_server/.env"
-if [ ! -f "mcp_server/.env" ]; then
+echo "==> Ensuring root .env exists"
+if [ ! -f ".env" ]; then
   if [ -f "mcp_server/.env.example" ]; then
-    cp mcp_server/.env.example mcp_server/.env
-    echo "Created mcp_server/.env from .env.example. Please edit AUTH_TOKEN and MY_NUMBER."
+    cp mcp_server/.env.example .env
+    echo "Created .env from mcp_server/.env.example. Please edit AUTH_TOKEN and MY_NUMBER."
   else
-    cat > mcp_server/.env <<'EOF'
+    cat > .env <<'EOF'
 AUTH_TOKEN=change_me
 MY_NUMBER=+15551234567
-# DB_PATH is optional. Defaults to ../hle_pipeline/data/hle_quiz.db
+# DB_PATH is optional. Defaults to hle_pipeline/data/hle_quiz.db
 # DB_PATH="/absolute/path/to/hle_quiz.db"
 EOF
-    echo "Created mcp_server/.env. Please edit AUTH_TOKEN and MY_NUMBER."
+    echo "Created .env. Please edit AUTH_TOKEN and MY_NUMBER."
   fi
 fi
 
