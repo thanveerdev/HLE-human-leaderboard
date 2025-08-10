@@ -125,7 +125,7 @@ def main() -> None:
     server_dir = root / "mcp_server"
     server_venv = server_dir / ".venv"
     server_requirements = server_dir / "requirements.txt"
-    server_env = server_dir / ".env"
+    server_env = root / ".env"
 
     base_python = sys.executable
     print(f"Using base python: {base_python}")

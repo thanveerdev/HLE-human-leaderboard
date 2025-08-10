@@ -13,8 +13,8 @@ This creates `hle_pipeline/data/hle_quiz.db` (if HF_TOKEN set), installs deps, a
 
 ```bash
 # From repo root
-# Option A: auto-load from hle_pipeline/.env
-echo 'HF_TOKEN=hf_xxx' > hle_pipeline/.env
+# Option A: auto-load from root .env
+echo 'HF_TOKEN=hf_xxx' > .env
 bash scripts/setup.sh --force
 
 # Option B: set for this run only
@@ -43,7 +43,7 @@ Copy the printed `https://<random>.trycloudflare.com` URL.
 ### 4) Connect in your WhatsApp host (MCP client)
 - Endpoint: your Cloudflare URL (from above)
 - Auth type: Bearer
-- Token: the value of `AUTH_TOKEN` from `mcp_server/.env`
+- Token: the value of `AUTH_TOKEN` from `.env`
 
 After connecting, the following tools are available:
 
@@ -53,9 +53,9 @@ Note: If you use zsh, quote the extras like '.[server]' or escape brackets.
 - `check_answer(question_id, answer)` → verifies an answer
 
 ### Common issues
-- Missing `AUTH_TOKEN` → create `mcp_server/.env` with `AUTH_TOKEN` and `MY_NUMBER`.
+- Missing `AUTH_TOKEN` → create `.env` with `AUTH_TOKEN` and `MY_NUMBER`.
 - Empty DB / no questions → ensure `HF_TOKEN` is set and re-run `init_db.py --force`.
-- Custom DB location → set `DB_PATH` in `mcp_server/.env`.
+- Custom DB location → set `DB_PATH` in `.env`.
 - Cloudflare URL unreachable → keep `cloudflared` running; check local firewall.
 - `.env` parsing errors → only `KEY=VALUE` lines; quote paths with spaces.
 

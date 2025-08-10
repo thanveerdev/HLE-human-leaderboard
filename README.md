@@ -29,18 +29,18 @@ Use your WhatsApp host that supports MCP (Model Context Protocol) to call the MC
 
 ### 1) One-command setup
 
-Requirements: Python 3.11+, `uv` installed. If `hle_pipeline/.env` exists with `HF_TOKEN=...`, setup will auto-load it.
+Requirements: Python 3.11+, `uv` installed. If `.env` exists with `HF_TOKEN=...`, setup will auto-load it.
 
 ```bash
 ## Option A: Use local env file
-echo 'HF_TOKEN=hf_xxx' > hle_pipeline/.env
+echo 'HF_TOKEN=hf_xxx' > .env
 bash scripts/setup.sh --force
 
 ## Option B: Export in shell for this run
 HF_TOKEN=hf_xxx bash scripts/setup.sh --force
 ```
 
-This will create venvs, install deps via uv, initialize the DB, and prepare `mcp_server/.env`.
+This will create venvs, install deps via uv, initialize the DB, and ensure a root `.env` exists.
 
 ### 2) Run the MCP server
 
@@ -68,7 +68,7 @@ Copy the printed `https://<random>.trycloudflare.com` URL.
 ### 4) Connect in your WhatsApp host (MCP client)
 - Endpoint: your Cloudflare URL
 - Auth type: Bearer
-- Token: the value of `AUTH_TOKEN` in mcp_server/.env
+- Token: the value of `AUTH_TOKEN` in `.env`
 
 ## Available MCP tools
 
@@ -90,11 +90,11 @@ Example JSON response from play_exam:
 ## Operational notes
 
 - Secrets
-  - MCP: `mcp_server/.env` with `AUTH_TOKEN`, `MY_NUMBER` (E.164 format).
-  - HLE ingest: `hle_pipeline` with `HF_TOKEN` exported in your shell (or via a local .env if you integrate it).
+  - MCP: root `.env` with `AUTH_TOKEN`, `MY_NUMBER` (E.164 format).
+  - HLE ingest: `HF_TOKEN` (either exported in shell or set in root `.env`).
 - Database path
-  - Defaults to `../hle_pipeline/data/hle_quiz.db` from `mcp_server/`.
-  - Override by setting `DB_PATH` in `mcp_server/.env`.
+  - Defaults to `hle_pipeline/data/hle_quiz.db`.
+  - Override by setting `DB_PATH` in root `.env`.
 - Cloud exposure
   - `cloudflared tunnel --url http://localhost:8086` is the fastest path for demos.
 - Licensing
@@ -103,7 +103,7 @@ Example JSON response from play_exam:
 ## Troubleshooting
 
 - MCP server fails with `AUTH_TOKEN is required`:
-  - Create `mcp_server/.env` with `AUTH_TOKEN=...` and `MY_NUMBER=+...` (no quotes or comments).
+  - Create `.env` with `AUTH_TOKEN=...` and `MY_NUMBER=+...` (no quotes or comments).
 - `python-dotenv could not parse statement ...`:
   - Ensure `.env` contains only `KEY=VALUE` lines; wrap DB paths with spaces in double quotes.
 - `No question available for provided filters`:
