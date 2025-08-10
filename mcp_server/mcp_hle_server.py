@@ -2,7 +2,9 @@ import asyncio
 import os
 import sqlite3
 import textwrap
-from typing import Annotated, Optional, List
+import uuid
+from dataclasses import dataclass
+from typing import Annotated, Optional, List, Dict
 
 from dotenv import load_dotenv
 from fastmcp import FastMCP
@@ -223,6 +225,33 @@ def _format_quiz_wa(questions: List[Question]) -> str:
         lines.pop()
     return "\n".join(lines)
 
+
+def _format_single_question_wa(q: Question, idx: int, total: int) -> str:
+    header = f"*Question {idx}/{total}*"
+    parts: List[str] = [
+        header,
+        _wrap(q.question.strip(), 70),
+        "",
+    ]
+    if q.subject:
+        parts.append(f"- 📚 Subject: {q.subject}")
+    if q.difficulty:
+        parts.append(f"- 🎯 Difficulty: {q.difficulty}")
+    if q.question_type:
+        parts.append(f"- 🧩 Type: {q.question_type}")
+    # Intentionally do not expose the question ID to the end user
+    return "\n".join(parts)
+
+
+@dataclass
+class SessionState:
+    questions: List[Question]
+    current_index: int = 0
+    correct_count: int = 0
+
+
+QUIZ_SESSIONS: Dict[str, SessionState] = {}
+
 @mcp.tool(description="WhatsApp-friendly formatted question. Use when messaging users.")
 async def play_exam_wa(
     subject: Annotated[Optional[str], Field(description="Optional subject filter (e.g., Physics)")] = None,
@@ -258,6 +287,50 @@ async def play_exam_wa(
         return _format_quiz_wa(questions)
 
 
+@mcp.tool(description="Start a 10-question WhatsApp quiz (one-by-one flow). Returns a session id and first question.")
+async def start_quiz_wa(
+    subject: Annotated[Optional[str], Field(description="Optional subject filter (e.g., Physics)")] = None,
+    question_type: Annotated[Optional[str], Field(description="Optional question type filter")] = None,
+) -> str:
+    with get_conn() as conn:
+        subjects = get_all_subjects(conn)
+        qtypes = get_all_question_types(conn)
+
+        subj_canon = normalize_subject(subject, subjects)
+        qtype_canon = normalize_qtype(question_type, qtypes)
+
+        sql = "SELECT id, question, subject, difficulty, question_type FROM questions WHERE 1=1"
+        params: list = []
+        if subj_canon:
+            sql += " AND subject = ?"
+            params.append(subj_canon)
+        if qtype_canon:
+            sql += " AND question_type = ?"
+            params.append(qtype_canon)
+        sql += " ORDER BY RANDOM() LIMIT 10"
+
+        cur = conn.execute(sql, params)
+        rows = cur.fetchall()
+        if not rows:
+            cur = conn.execute(
+                "SELECT id, question, subject, difficulty, question_type FROM questions ORDER BY RANDOM() LIMIT 10"
+            )
+            rows = cur.fetchall()
+        if not rows:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="No question available (database empty)"))
+
+    questions = [Question(**dict(r)) for r in rows]
+    session_id = uuid.uuid4().hex
+    QUIZ_SESSIONS[session_id] = SessionState(questions=questions)
+
+    first = questions[0]
+    msg = [
+        f"SID: {session_id}",
+        _format_single_question_wa(first, idx=1, total=len(questions)),
+    ]
+    return "\n".join(msg)
+
+
 @mcp.tool(description="WhatsApp-friendly formatted answer check.")
 async def check_answer_wa(
     question_id: Annotated[str, Field(description="The question id returned by play_exam")],
@@ -275,6 +348,55 @@ async def check_answer_wa(
         is_correct = (answer_norm == gt) or (gt in answer_norm) or (answer_norm in gt)
         expl = row["explanation"] or ""
         return _format_answer_wa(is_correct=is_correct, ground_truth=row["answer"], explanation=expl)
+
+
+@mcp.tool(description="Submit an answer for the current question in a running quiz session. Returns verdict and next question or final score.")
+async def answer_quiz_wa(
+    session_id: Annotated[str, Field(description="Session id returned by start_quiz_wa")],
+    answer: Annotated[str, Field(description="User's answer text")],
+) -> str:
+    state = QUIZ_SESSIONS.get(session_id)
+    if state is None:
+        raise McpError(ErrorData(code=INVALID_PARAMS, message="Unknown or expired session_id"))
+
+    # Identify current question
+    if state.current_index >= len(state.questions):
+        return f"Quiz already completed. Score: {state.correct_count}/{len(state.questions)}"
+
+    current_q = state.questions[state.current_index]
+    normalized_answer = (answer or "").strip().lower()
+    if not normalized_answer:
+        raise McpError(ErrorData(code=INVALID_PARAMS, message="Answer cannot be empty"))
+
+    # Look up ground truth from DB to avoid exposing in session state
+    with get_conn() as conn:
+        cur = conn.execute("SELECT answer FROM questions WHERE id = ?", (current_q.id,))
+        row = cur.fetchone()
+        if not row:
+            raise McpError(ErrorData(code=INVALID_PARAMS, message="Question not found in DB"))
+        gt = (row[0] or "").strip().lower()
+
+    is_correct = (normalized_answer == gt) or (gt in normalized_answer) or (normalized_answer in gt)
+    if is_correct:
+        state.correct_count += 1
+
+    # Advance to next question
+    state.current_index += 1
+    remaining = len(state.questions) - state.current_index
+
+    verdict = "✅ Right answer" if is_correct else "❌ Better luck next time"
+
+    if remaining <= 0:
+        # End of quiz: remove session
+        total = len(state.questions)
+        score_line = f"🎉 Quiz complete. Score: {state.correct_count}/{total}"
+        # Clean up session
+        QUIZ_SESSIONS.pop(session_id, None)
+        return "\n".join([verdict, score_line])
+
+    next_q = state.questions[state.current_index]
+    prompt_next = _format_single_question_wa(next_q, idx=state.current_index + 1, total=len(state.questions))
+    return "\n".join([verdict, "", prompt_next])
 
 
 @mcp.tool(description="WhatsApp-friendly formatted database summary.")
