@@ -61,6 +61,7 @@ brew install cloudflare/cloudflare/cloudflared
 # Start a quick tunnel to your local MCP server
 cloudflared tunnel --url http://localhost:8086
 ```
+#cloudflared tunnel --edge-ip-version 4 --protocol quic --logfile logs/cloudflared.log --loglevel debug --url http://localhost:8086 // for edgecases
 
 Copy the printed `https://<random>.trycloudflare.com` URL.
 

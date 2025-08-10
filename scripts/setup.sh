@@ -2,56 +2,46 @@
 set -euo pipefail
 
 # Usage: bash scripts/setup.sh [--force]
-# - Expects `uv` to be installed
+# - Uses pip instead of uv
 # - Uses HF_TOKEN from environment if set
 
-if ! command -v uv >/dev/null 2>&1; then
-  echo "Error: uv is not installed. Install with: brew install uv (macOS) or see https://docs.astral.sh/uv/" >&2
+if ! command -v python >/dev/null 2>&1; then
+  echo "Error: python is not installed." >&2
   exit 1
 fi
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 FORCE_FLAG="${1:-}"
 
-echo "==> Setting up hle_pipeline"
-pushd "$ROOT_DIR/hle_pipeline" >/dev/null
-if [ ! -d .venv ]; then
-  uv venv
-fi
+cd "$ROOT_DIR"
+
+echo "==> Installing package dependencies"
+pip install -e ".[server,pipeline]"
+
+echo "==> Loading HF_TOKEN from hle_pipeline/.env if present"
 # Load HF_TOKEN from local .env if present
-if [ -f .env ]; then
-  echo "==> Loading HF_TOKEN from hle_pipeline/.env"
+if [ -f "hle_pipeline/.env" ]; then
+  echo "==> Found HF_TOKEN in hle_pipeline/.env"
   set -a
   # shellcheck disable=SC1091
-  . ./.env
+  . ./hle_pipeline/.env
   set +a
 fi
-export VIRTUAL_ENV="$PWD/.venv"
-export PATH="$VIRTUAL_ENV/bin:$PATH"
-uv pip install -e '..[pipeline]'
+
 echo "==> Initializing database (HF_TOKEN respected if set)"
 if [ "$FORCE_FLAG" = "--force" ]; then
-  "$VIRTUAL_ENV/bin/python" scripts/init_db.py --force
+  python -m hle_pipeline.scripts.init_db --force
 else
-  "$VIRTUAL_ENV/bin/python" scripts/init_db.py
+  python -m hle_pipeline.scripts.init_db
 fi
-popd >/dev/null
 
-echo "==> Setting up mcp_server"
-pushd "$ROOT_DIR/mcp_server" >/dev/null
-if [ ! -d .venv ]; then
-  uv venv
-fi
-export VIRTUAL_ENV="$PWD/.venv"
-export PATH="$VIRTUAL_ENV/bin:$PATH"
-uv pip install -e '..[server]'
-
-if [ ! -f .env ]; then
-  if [ -f .env.example ]; then
-    cp .env.example .env
+echo "==> Checking mcp_server/.env"
+if [ ! -f "mcp_server/.env" ]; then
+  if [ -f "mcp_server/.env.example" ]; then
+    cp mcp_server/.env.example mcp_server/.env
     echo "Created mcp_server/.env from .env.example. Please edit AUTH_TOKEN and MY_NUMBER."
   else
-    cat > .env <<'EOF'
+    cat > mcp_server/.env <<'EOF'
 AUTH_TOKEN=change_me
 MY_NUMBER=+15551234567
 # DB_PATH is optional. Defaults to ../hle_pipeline/data/hle_quiz.db
@@ -60,9 +50,9 @@ EOF
     echo "Created mcp_server/.env. Please edit AUTH_TOKEN and MY_NUMBER."
   fi
 fi
-popd >/dev/null
 
-echo "\nAll set. Next:"
+echo ""
+echo "All set. Next:"
 echo "- Start the server: bash scripts/run_server.sh"
 echo "- Expose publicly: cloudflared tunnel --url http://localhost:8086"
 

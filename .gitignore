@@ -52,3 +52,6 @@ hle_pipeline/data/*.db
 # Project-specific ignores
 #########################
 viral.md
+data/
+logs/
+cloudflared.tgz

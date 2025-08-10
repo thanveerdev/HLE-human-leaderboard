@@ -3,15 +3,18 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-cd "$ROOT_DIR/mcp_server"
-if [ ! -d .venv ]; then
-  echo "mcp_server venv not found. Run: bash scripts/setup.sh" >&2
-  exit 1
+cd "$ROOT_DIR"
+
+# Load environment variables from mcp_server/.env if it exists
+if [ -f "mcp_server/.env" ]; then
+  echo "==> Loading environment from mcp_server/.env"
+  set -a
+  source mcp_server/.env
+  set +a
 fi
 
-export VIRTUAL_ENV="$PWD/.venv"
-export PATH="$VIRTUAL_ENV/bin:$PATH"
-
-exec "$VIRTUAL_ENV/bin/python" mcp_hle_server.py
+# Run the MCP server
+echo "==> Starting MCP server..."
+python mcp_server/mcp_hle_server.py
 
 

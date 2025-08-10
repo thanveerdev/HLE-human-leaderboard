@@ -24,6 +24,6 @@ pipeline = [
 ]
 
 [tool.setuptools]
-packages = []
+packages = ["hle_pipeline", "mcp_server"]
 
 
